@@ -1,0 +1,67 @@
+---
+title: "Seurat_after QC"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(Seurat)
+
+library(data.table)
+
+library(dplyr)
+
+#Afrer QC
+rawfile<- "https://github.com/liuqivandy/scRNABatchQC/raw/master/bioplar1.csv.gz"
+rawdata<-data.frame(fread(rawfile),row.names=1)
+
+#Create Seurat Obj
+bioplar1 <- CreateSeuratObject(counts = rawdata, min.cells = 3, min.features = 200, project = "bioplar")
+bioplar1[["percent.mt"]] <- PercentageFeatureSet(bioplar1, pattern = "^mt-")
+
+#Normalization nFeature >200, nCount>500, %mito<10
+bioplar1 <- subset(bioplar1, subset = nFeature_RNA > 200 & nCount_RNA>500 & percent.mt < 10)
+bioplar1 <- NormalizeData(bioplar1)
+
+#Find variable features
+bioplar1 <- FindVariableFeatures(bioplar1, selection.method = "vst", nfeatures = 2000)
+bioplar1 <- ScaleData(bioplar1)
+
+#Dimensiobn reduction
+bioplar1 <- RunPCA(bioplar1, features = VariableFeatures(bioplar1))
+#Find neighbor
+bioplar1 <- FindNeighbors(bioplar1, dims = 1:20)
+bioplar1 <- FindClusters(bioplar1, resolution = 0.5)
+bioplar1 <- RunTSNE(bioplar1, dims = 1:20)
+
+#Find markers
+bioplar1.markers <- FindAllMarkers(bioplar1, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+#Top10
+top10 <- bioplar1.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+pdf("pca.pdf")
+DimPlot(bioplar1, reduction= "pca",label=T, label.size = 4)
+dev.off()
+
+pdf("tsne.pdf")
+DimPlot(bioplar1, reduction = "tsne",label=T,label.size=4)
+dev.off()
+
+pdf("marker.pdf", height=10)
+DoHeatmap(bioplar1, features = top10$gene) + NoLegend()
+dev.off()
+
+pdf("featureplot.pdf")
+FeaturePlot(bioplar1, features=c("Prkca","Cck","Pcdh17", "Rlbp1","Igfn1","Nnat"),label=T)
+dev.off()
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
